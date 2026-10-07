@@ -1,0 +1,55 @@
+{
+	"name": "Scenoptic: topic assigned → email",
+	"nodes": [
+		{
+			"id": "4f0d1c52-6b0e-4a51-9a63-2b1f7c1e0a01",
+			"name": "Topic assigned",
+			"type": "n8n-nodes-scenoptic.scenopticTrigger",
+			"typeVersion": 1,
+			"position": [0, 0],
+			"webhookId": "5b7e2d10-3c4f-4e8a-9d61-7a2c0f3b9e02",
+			"parameters": {
+				"projectId": "REPLACE_WITH_PROJECT_ID",
+				"events": ["notification.created"],
+				"options": {
+					"notificationKinds": ["topic.assigned"]
+				}
+			},
+			"credentials": {
+				"scenopticApi": {
+					"id": "REPLACE_WITH_CREDENTIAL_ID",
+					"name": "Scenoptic API"
+				}
+			}
+		},
+		{
+			"id": "4f0d1c52-6b0e-4a51-9a63-2b1f7c1e0a03",
+			"name": "Send email",
+			"type": "n8n-nodes-base.emailSend",
+			"typeVersion": 2.1,
+			"position": [260, 0],
+			"parameters": {
+				"fromEmail": "REPLACE_WITH_SENDER@example.com",
+				"toEmail": "REPLACE_WITH_RECIPIENT@example.com",
+				"subject": "={{ 'Scenoptic: topic assigned to ' + ($json.notification.recipient.name || $json.notification.recipient.email) + ($json.topic ? ' - ' + $json.topic.title : '') }}",
+				"emailFormat": "html",
+				"html": "=<p><strong>A BCF topic was assigned to {{ $json.notification.recipient.name || $json.notification.recipient.email }}</strong> ({{ $json.notification.recipient.email }}).</p>\n<table cellpadding=\"4\">\n<tr><td>Topic</td><td>{{ $json.topic ? $json.topic.title : '(topic deleted)' }}</td></tr>\n<tr><td>Priority</td><td>{{ ($json.topic && $json.topic.priority) || '-' }}</td></tr>\n<tr><td>Due date</td><td>{{ ($json.topic && $json.topic.due_date) ? $json.topic.due_date.slice(0, 10) : '-' }}</td></tr>\n<tr><td>Assigned by</td><td>{{ $json.scenopticactor }}</td></tr>\n</table>\n{{ $json.topic ? '<p><a href=\"https://cde.scenoptic.com/projects/' + $json.project_id + '?section=bcf&topic=' + $json.topic.guid + '\">Open the topic in Scenoptic</a></p>' : '' }}",
+				"options": {}
+			},
+			"credentials": {
+				"smtp": {
+					"id": "REPLACE_WITH_SMTP_CREDENTIAL_ID",
+					"name": "SMTP account"
+				}
+			}
+		}
+	],
+	"connections": {
+		"Topic assigned": {
+			"main": [[{ "node": "Send email", "type": "main", "index": 0 }]]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	}
+}

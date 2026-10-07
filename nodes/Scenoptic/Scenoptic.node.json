@@ -1,0 +1,21 @@
+{
+	"node": "n8n-nodes-scenoptic.scenoptic",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": [
+		"Productivity",
+		"Development"
+	],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://cde.scenoptic.com/api/docs"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://cde.scenoptic.com/api/docs"
+			}
+		]
+	}
+}

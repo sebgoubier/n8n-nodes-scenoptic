@@ -1,0 +1,364 @@
+{
+	"name": "Scenoptic: email attachments → documents and conversions",
+	"nodes": [
+		{
+			"id": "8231ced5-d4d9-49e6-ada1-58d9f94388a6",
+			"name": "Incoming email",
+			"type": "n8n-nodes-base.emailReadImap",
+			"typeVersion": 2.1,
+			"position": [
+				0,
+				0
+			],
+			"parameters": {
+				"mailbox": "INBOX",
+				"postProcessAction": "read",
+				"downloadAttachments": true,
+				"format": "resolved",
+				"dataPropertyAttachmentsPrefixName": "attachment_",
+				"options": {
+					"customEmailConfig": "[\"UNSEEN\"]"
+				}
+			},
+			"credentials": {
+				"imap": {
+					"id": "REPLACE_WITH_IMAP_CREDENTIAL_ID",
+					"name": "IMAP account"
+				}
+			}
+		},
+		{
+			"id": "5b9dbc1b-dbdb-43b7-b38d-a846307d770a",
+			"name": "One item per attachment",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [
+				220,
+				0
+			],
+			"parameters": {
+				"jsCode": "// One item per attachment. Models (MODEL_EXTENSIONS) go to an on-demand conversion,\n// every other attachment is filed as a document.\n// The sender of each mail that carries a model is kept in the workflow static data, keyed by\n// the conversion external reference, so that the reply can be sent when the conversion ends.\nconst MODEL_EXTENSIONS = ['.ifc'];\nconst KEEP_DAYS = 7;\n\nconst store = $getWorkflowStaticData('global');\nstore.pendingReplies = store.pendingReplies || {};\nconst now = Date.now();\nfor (const [ref, entry] of Object.entries(store.pendingReplies)) {\n  if (now - entry.at > KEEP_DAYS * 24 * 3600 * 1000) delete store.pendingReplies[ref];\n}\n\nconst out = [];\nfor (const item of $input.all()) {\n  const mail = item.json;\n  const sender = mail.from && mail.from.value && mail.from.value[0] ? mail.from.value[0].address : '';\n  const externalRef = ('mail:' + (mail.messageId || String(now))).slice(0, 200);\n  for (const [field, file] of Object.entries(item.binary || {})) {\n    const fileName = file.fileName || field;\n    const isModel = MODEL_EXTENSIONS.some((ext) => fileName.toLowerCase().endsWith(ext));\n    if (isModel && sender) {\n      store.pendingReplies[externalRef] = { to: sender, subject: mail.subject || '', at: now };\n    }\n    out.push({ json: { externalRef, fileName, isModel, sender }, binary: { data: file } });\n  }\n}\nreturn out;\n"
+			}
+		},
+		{
+			"id": "77b0c4b4-1292-4ca9-8746-75268c20858f",
+			"name": "Is it a model?",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2.2,
+			"position": [
+				440,
+				0
+			],
+			"parameters": {
+				"conditions": {
+					"options": {
+						"caseSensitive": true,
+						"leftValue": "",
+						"typeValidation": "strict",
+						"version": 2
+					},
+					"conditions": [
+						{
+							"id": "c1",
+							"leftValue": "={{ $json.isModel }}",
+							"operator": {
+								"type": "boolean",
+								"operation": "true",
+								"singleValue": true
+							}
+						}
+					],
+					"combinator": "and"
+				},
+				"options": {}
+			}
+		},
+		{
+			"id": "196e62f3-3fdb-4923-8bcc-f80ed4aa67f2",
+			"name": "Convert the model",
+			"type": "n8n-nodes-scenoptic.scenoptic",
+			"typeVersion": 1,
+			"position": [
+				660,
+				-100
+			],
+			"parameters": {
+				"resource": "conversion",
+				"operation": "convert",
+				"projectId": "REPLACE_WITH_PROJECT_ID",
+				"binaryPropertyName": "data",
+				"waitForCompletion": false,
+				"options": {
+					"externalRef": "={{ $json.externalRef }}",
+					"retentionDays": 7
+				}
+			},
+			"credentials": {
+				"scenopticApi": {
+					"id": "REPLACE_WITH_CREDENTIAL_ID",
+					"name": "Scenoptic API"
+				}
+			}
+		},
+		{
+			"id": "ab6612cd-d01d-424d-b8f5-71c3246dd367",
+			"name": "File the document",
+			"type": "n8n-nodes-scenoptic.scenoptic",
+			"typeVersion": 1,
+			"position": [
+				660,
+				100
+			],
+			"parameters": {
+				"resource": "document",
+				"operation": "upload",
+				"projectId": "REPLACE_WITH_PROJECT_ID",
+				"folderId": "REPLACE_WITH_FOLDER_ID",
+				"binaryPropertyName": "data",
+				"options": {}
+			},
+			"credentials": {
+				"scenopticApi": {
+					"id": "REPLACE_WITH_CREDENTIAL_ID",
+					"name": "Scenoptic API"
+				}
+			}
+		},
+		{
+			"id": "b3ed457b-e355-4381-bb7e-712215218a25",
+			"name": "Conversion finished",
+			"type": "n8n-nodes-scenoptic.scenopticTrigger",
+			"typeVersion": 1,
+			"position": [
+				0,
+				400
+			],
+			"webhookId": "96316b4c-d298-4984-bc59-c772c6427c89",
+			"parameters": {
+				"projectId": "REPLACE_WITH_PROJECT_ID",
+				"events": [
+					"conversion.completed",
+					"conversion.failed"
+				],
+				"options": {}
+			},
+			"credentials": {
+				"scenopticApi": {
+					"id": "REPLACE_WITH_CREDENTIAL_ID",
+					"name": "Scenoptic API"
+				}
+			}
+		},
+		{
+			"id": "2b96335b-c96a-4f61-9802-4eaf8efd5fd8",
+			"name": "Find the sender",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [
+				220,
+				400
+			],
+			"parameters": {
+				"jsCode": "// Keep only the conversions started by this workflow, and add who to answer.\nconst store = $getWorkflowStaticData('global');\nconst replies = store.pendingReplies || {};\nconst out = [];\nfor (const item of $input.all()) {\n  const conversion = item.json.conversion || {};\n  const reply = replies[conversion.external_ref];\n  if (!reply) continue;\n  out.push({ json: { to: reply.to, subject: reply.subject, conversionId: conversion.id } });\n}\nreturn out;\n"
+			}
+		},
+		{
+			"id": "9af9552b-1461-4402-ae66-ec326c9de519",
+			"name": "Get the conversion",
+			"type": "n8n-nodes-scenoptic.scenoptic",
+			"typeVersion": 1,
+			"position": [
+				440,
+				400
+			],
+			"parameters": {
+				"resource": "conversion",
+				"operation": "get",
+				"conversionId": "={{ $json.conversionId }}"
+			},
+			"credentials": {
+				"scenopticApi": {
+					"id": "REPLACE_WITH_CREDENTIAL_ID",
+					"name": "Scenoptic API"
+				}
+			}
+		},
+		{
+			"id": "372f525d-085e-4bef-9333-db7258848fd4",
+			"name": "Converted?",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2.2,
+			"position": [
+				660,
+				400
+			],
+			"parameters": {
+				"conditions": {
+					"options": {
+						"caseSensitive": true,
+						"leftValue": "",
+						"typeValidation": "strict",
+						"version": 2
+					},
+					"conditions": [
+						{
+							"id": "c1",
+							"leftValue": "={{ $json.status }}",
+							"operator": {
+								"type": "string",
+								"operation": "equals"
+							},
+							"rightValue": "ready"
+						}
+					],
+					"combinator": "and"
+				},
+				"options": {}
+			}
+		},
+		{
+			"id": "464ff58a-d50b-45b1-a53c-17f92af9c109",
+			"name": "Reply: converted",
+			"type": "n8n-nodes-base.emailSend",
+			"typeVersion": 2.1,
+			"position": [
+				880,
+				300
+			],
+			"parameters": {
+				"fromEmail": "REPLACE_WITH_SENDER@example.com",
+				"toEmail": "={{ $('Find the sender').item.json.to }}",
+				"subject": "={{ 'Re: ' + $('Find the sender').item.json.subject }}",
+				"emailFormat": "html",
+				"html": "=<p>Your model <strong>{{ $json.name }}</strong> was converted by Scenoptic.</p>\n<p>{{ ($json.artifacts.find((a) => a.kind === 'glb') || {}).url ? '<a href=\"' + $json.artifacts.find((a) => a.kind === 'glb').url + '\">Download the 3D model (GLB)</a>. This link is valid for one hour.' : 'No 3D model was produced.' }}</p>\n<p>Conversion: {{ $json.id }}</p>",
+				"options": {}
+			},
+			"credentials": {
+				"smtp": {
+					"id": "REPLACE_WITH_SMTP_CREDENTIAL_ID",
+					"name": "SMTP account"
+				}
+			}
+		},
+		{
+			"id": "0b61c5c3-fcbc-40f0-a358-4f5b9954bd11",
+			"name": "Reply: failed",
+			"type": "n8n-nodes-base.emailSend",
+			"typeVersion": 2.1,
+			"position": [
+				880,
+				500
+			],
+			"parameters": {
+				"fromEmail": "REPLACE_WITH_SENDER@example.com",
+				"toEmail": "={{ $('Find the sender').item.json.to }}",
+				"subject": "={{ 'Re: ' + $('Find the sender').item.json.subject }}",
+				"emailFormat": "html",
+				"html": "=<p>Scenoptic could not convert <strong>{{ $json.name }}</strong> (error code {{ $json.error ? $json.error.code : 'unknown' }}).</p>\n<p>Check that the file is a valid model, then send it again.</p>\n<p>Conversion: {{ $json.id }}</p>",
+				"options": {}
+			},
+			"credentials": {
+				"smtp": {
+					"id": "REPLACE_WITH_SMTP_CREDENTIAL_ID",
+					"name": "SMTP account"
+				}
+			}
+		}
+	],
+	"connections": {
+		"Incoming email": {
+			"main": [
+				[
+					{
+						"node": "One item per attachment",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"One item per attachment": {
+			"main": [
+				[
+					{
+						"node": "Is it a model?",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Is it a model?": {
+			"main": [
+				[
+					{
+						"node": "Convert the model",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "File the document",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Conversion finished": {
+			"main": [
+				[
+					{
+						"node": "Find the sender",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Find the sender": {
+			"main": [
+				[
+					{
+						"node": "Get the conversion",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Get the conversion": {
+			"main": [
+				[
+					{
+						"node": "Converted?",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Converted?": {
+			"main": [
+				[
+					{
+						"node": "Reply: converted",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Reply: failed",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	}
+}

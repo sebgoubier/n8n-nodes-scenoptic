@@ -1,0 +1,62 @@
+{
+	"name": "n8n-nodes-scenoptic",
+	"version": "0.2.0",
+	"description": "n8n nodes for the Scenoptic CDE: webhook trigger, projects, documents, assemblies, on-demand conversions and BCF topics",
+	"license": "MIT",
+	"homepage": "https://cde.scenoptic.com/api/docs",
+	"keywords": [
+		"n8n-community-node-package",
+		"scenoptic",
+		"bcf",
+		"bim"
+	],
+	"author": {
+		"name": "Sébastien Goubier",
+		"email": "sebgoubier@gmail.com",
+		"url": "https://sdk.scenoptic.com/"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/sebgoubier/n8n-nodes-scenoptic.git"
+	},
+	"bugs": {
+		"url": "https://github.com/sebgoubier/n8n-nodes-scenoptic/issues"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"typecheck": "tsc --noEmit -p tsconfig.test.json",
+		"test": "vitest run"
+	},
+	"files": [
+		"dist",
+		"!dist/tsconfig.tsbuildinfo",
+		"examples",
+		"CHANGELOG.md"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/ScenopticApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/Scenoptic/Scenoptic.node.js",
+			"dist/nodes/ScenopticTrigger/ScenopticTrigger.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "0.50.4",
+		"@types/node": "^22.20.5",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"typescript": "5.9.2",
+		"vitest": "3.2.4"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}
